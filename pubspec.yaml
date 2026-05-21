@@ -1,0 +1,24 @@
+name: buildhut_updater
+description: Android in-app update checker and installer for BuildHut API.
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.5
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.9.2
+  install_plugin_v3: ^3.1.0
+  path_provider: ^2.1.4
+  permission_handler: ^12.0.1
+  flutter_markdown_plus: ^1.0.7
+  package_info_plus: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
