@@ -120,7 +120,8 @@ The core service that communicates with the BuildHut API.
 final service = BuildHutUpdateService(
   appId: '51b43a77-352d-4161-b454-554edeeeaf71',
   currentVersion: '1.2.3+5',
-  baseUrl: 'https://buildhut.fly.dev/api/app',  // optional, this is the default
+  baseUrl: 'https://hut.buildr.fun/api/app',      // optional, this is the default
+  os: 'android',                                  // optional OS filter for the lookup
   dio: myCustomDioInstance,                       // optional
 );
 ```
@@ -129,7 +130,8 @@ final service = BuildHutUpdateService(
 | ------------------ | -------- | ------------------------------------ | ------------------------------------------- |
 | `appId`            | `String` | required                             | BuildHut application UUID                   |
 | `currentVersion`   | `String` | required                             | Current app version for comparison           |
-| `baseUrl`          | `String` | `https://buildhut.fly.dev/api/app`   | BuildHut API base URL                       |
+| `baseUrl`          | `String` | `https://hut.buildr.fun/api/app`     | BuildHut API base URL                       |
+| `os`               | `String?`| `null`                               | Restrict lookup to one OS (e.g. `android`) — recommended when the app ships multiple formats |
 | `dio`              | `Dio?`   | `null`                               | Custom Dio instance for HTTP configuration  |
 
 #### `checkForUpdates()`
@@ -138,7 +140,7 @@ final service = BuildHutUpdateService(
 Future<BuildHutAppUpdate?> checkForUpdates()
 ```
 
-Queries the BuildHut API and returns a `BuildHutAppUpdate` if a newer version exists, or `null` if the app is up to date. Throws on network errors.
+Queries the BuildHut API and returns a `BuildHutAppUpdate` if a newer version exists, or `null` if the app is up to date. A server 404 (no build for the requested OS yet) is also treated as "no update". Throws on network errors.
 
 ```dart
 final update = await service.checkForUpdates();

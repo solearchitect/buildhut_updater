@@ -1,6 +1,6 @@
 name: buildhut_updater
 description: Android in-app update checker and installer for BuildHut API.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/solearchitect/buildhut_updater
 
 environment:

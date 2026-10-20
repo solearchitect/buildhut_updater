@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-20
+
+### Changed
+
+- **Breaking:** default `baseUrl` moved from the retired `buildhut.fly.dev`
+  edge to the self-hosted production instance `https://hut.buildr.fun/api/app`.
+  Pass a custom `baseUrl` if you host your own instance (unchanged).
+- `BuildHutUpdateService` now accepts an `os` parameter (e.g. `'android'`)
+  that adds `?os=` to the version check, so multi-format apps (APK + Linux
+  tarball) resolve the latest build for the requesting platform instead of
+  whatever format happened to be uploaded last.
+
+### Fixed
+
+- `checkForUpdates()` treats a server 404 (app has no build for the requested
+  OS yet) as "no update" instead of throwing a `DioException`.
+
 ## [0.1.0] - 2026-05-21
 
 ### Added

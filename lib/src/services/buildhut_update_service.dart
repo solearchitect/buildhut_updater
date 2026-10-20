@@ -44,32 +44,58 @@ class BuildHutUpdateService {
   /// The BuildHut API base URL. Defaults to the production instance.
   final String baseUrl;
 
+  /// Optional OS restriction for the update lookup (e.g. `'android'`).
+  /// Sent as `?os=` on the version check; `null` = legacy behaviour
+  /// (latest build of any OS).
+  final String? os;
+
   final Dio _dio;
 
   /// Creates a [BuildHutUpdateService].
   ///
   /// [appId] is the BuildHut application ID (UUID).
   /// [currentVersion] is the current app version string (e.g. `"1.2.3"` or `"1.2.3+4"`).
-  /// [baseUrl] defaults to the BuildHut production API at `https://buildhut.fly.dev/api/app`.
+  /// [baseUrl] defaults to the BuildHut production API at `https://hut.buildr.fun/api/app`.
+  /// [os] restricts the update lookup to builds for one OS (recommended:
+  /// an Android updater must not be handed the latest Linux tarball when the
+  /// app ships multiple formats). Pass `null` to keep the legacy behaviour
+  /// (latest build of any OS).
   /// Pass a custom [dio] instance to configure timeouts, interceptors, or base headers.
   BuildHutUpdateService({
     required this.appId,
     required this.currentVersion,
-    this.baseUrl = 'https://buildhut.fly.dev/api/app',
+    this.baseUrl = 'https://hut.buildr.fun/api/app',
+    this.os,
     Dio? dio,
   }) : _dio = dio ?? Dio();
 
   /// Checks for updates via the BuildHut API.
   ///
-  /// Queries `GET {baseUrl}/{appId}` and compares the returned version
-  /// against [currentVersion].
+  /// Queries `GET {baseUrl}/{appId}` (plus `?os=` when the service was
+  /// constructed with [os]) and compares the returned version against
+  /// [currentVersion].
   ///
   /// Returns a [BuildHutAppUpdate] if a newer version is available,
-  /// or `null` if the app is already up to date.
+  /// or `null` if the app is already up to date. A 404 from the server
+  /// (no build yet, or no build matching the OS filter) is treated the
+  /// same as "no update" instead of throwing.
   ///
   /// Throws a [DioException] on network errors.
   Future<BuildHutAppUpdate?> checkForUpdates() async {
-    final response = await _dio.get('$baseUrl/$appId');
+    final Response<dynamic> response;
+    try {
+      response = await _dio.get<dynamic>(
+        '$baseUrl/$appId',
+        queryParameters: os != null ? {'os': os} : null,
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        // App exists but has no build for this OS (or none at all yet) —
+        // not an error condition for the updater.
+        return null;
+      }
+      rethrow;
+    }
 
     if (response.statusCode == 200 && response.data != null) {
       final data = response.data;
