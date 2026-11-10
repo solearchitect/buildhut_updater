@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:install_plugin_v3/install_plugin_v3.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,49 +50,93 @@ class BuildHutUpdateService {
   /// (latest build of any OS).
   final String? os;
 
+  /// Optional CPU architecture restriction (e.g. `'arm64-v8a'`).
+  /// Sent as `?arch=` on the version check. When null AND running on
+  /// Android, the device's primary ABI is auto-detected and used, so a
+  /// Pixel gets the arm64 APK instead of whichever split uploaded last.
+  /// If the server has no build for that arch, the check retries without
+  /// it (still os-filtered) rather than reporting "no update".
+  final String? arch;
+
   final Dio _dio;
 
   /// Creates a [BuildHutUpdateService].
   ///
   /// [appId] is the BuildHut application ID (UUID).
-  /// [currentVersion] is the current app version string (e.g. `"1.2.3"` or `"1.2.3+4"`).
+  /// [currentVersion] is the current app version string (e.g. `"1.2.3+4"`).
   /// [baseUrl] defaults to the BuildHut production API at `https://hut.buildr.fun/api/app`.
   /// [os] restricts the update lookup to builds for one OS (recommended:
   /// an Android updater must not be handed the latest Linux tarball when the
   /// app ships multiple formats). Pass `null` to keep the legacy behaviour
   /// (latest build of any OS).
+  /// [arch] restricts the lookup to one CPU artifact; leave null on Android
+  /// to auto-detect the device ABI.
   /// Pass a custom [dio] instance to configure timeouts, interceptors, or base headers.
   BuildHutUpdateService({
     required this.appId,
     required this.currentVersion,
     this.baseUrl = 'https://hut.buildr.fun/api/app',
     this.os,
+    this.arch,
     Dio? dio,
   }) : _dio = dio ?? Dio();
 
+  /// The primary ABI of an Android device (e.g. `arm64-v8a`), or null when
+  /// detection fails or we are not on Android. [supportedAbis] is ordered
+  /// most-preferred first, which is exactly what we want to ask the server for.
+  static Future<String?> detectDeviceArch() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      final abis = info.supportedAbis;
+      return abis.isEmpty ? null : abis.first;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Checks for updates via the BuildHut API.
   ///
-  /// Queries `GET {baseUrl}/{appId}` (plus `?os=` when the service was
-  /// constructed with [os]) and compares the returned version against
+  /// Queries `GET {baseUrl}/{appId}` with `?os=` and `?arch=` filters as
+  /// configured/auto-detected, and compares the returned version against
   /// [currentVersion].
   ///
   /// Returns a [BuildHutAppUpdate] if a newer version is available,
   /// or `null` if the app is already up to date. A 404 from the server
-  /// (no build yet, or no build matching the OS filter) is treated the
-  /// same as "no update" instead of throwing.
+  /// (no build yet, or no build matching the filters) is treated the
+  /// same as "no update" instead of throwing. An arch-filtered 404
+  /// retries once without the arch (falling back to any build for the OS)
+  /// so a device never misses an update just because its exact ABI split
+  /// wasn't uploaded.
   ///
   /// Throws a [DioException] on network errors.
   Future<BuildHutAppUpdate?> checkForUpdates() async {
+    final resolvedArch = arch ?? await detectDeviceArch();
+    final update = await _check(os: os, arch: resolvedArch);
+    if (update != null || resolvedArch == null) return update;
+
+    // No artifact for this exact ABI — any build for the OS still beats
+    // nothing (arm64 devices run armeabi-v7a APKs).
+    return _check(os: os, arch: null);
+  }
+
+  Future<BuildHutAppUpdate?> _check({
+    required String? os,
+    required String? arch,
+  }) async {
     final Response<dynamic> response;
+    final query = <String, dynamic>{};
+    if (os != null) query['os'] = os;
+    if (arch != null) query['arch'] = arch;
     try {
       response = await _dio.get<dynamic>(
         '$baseUrl/$appId',
-        queryParameters: os != null ? {'os': os} : null,
+        queryParameters: query.isEmpty ? null : query,
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-        // App exists but has no build for this OS (or none at all yet) —
-        // not an error condition for the updater.
+        // App exists but has no build matching the filters (or none at all
+        // yet) — not an error condition for the updater.
         return null;
       }
       rethrow;

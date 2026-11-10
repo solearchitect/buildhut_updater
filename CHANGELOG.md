@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-10
+
+### Added
+
+- `arch` option on [BuildHutUpdateService]: restricts the update lookup to one
+  CPU artifact (`?arch=arm64-v8a` etc.). When null on Android, the device's
+  primary ABI is auto-detected (device_info_plus `supportedAbis`) so a Pixel
+  gets the arm64 APK instead of whichever split uploaded last.
+- Graceful fallback: an arch-filtered 404 retries once without the arch
+  (still os-filtered) — arm64 devices can still install an armeabi-v7a APK,
+  but never silently miss an update.
+
+### Fixed
+
+- Polify phones were handed a Linux tarball as an "APK" (`There's a problem
+  with the app file`) because the shipped client sent no `os` filter; the
+  unfiltered latest-build endpoint returns whichever artifact uploaded last.
+
 ## [0.2.0] - 2026-10-20
 
 ### Changed

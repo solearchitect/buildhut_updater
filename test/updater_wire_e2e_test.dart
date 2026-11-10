@@ -155,4 +155,70 @@ void main() {
       throwsA(isA<DioException>()),
     );
   });
+
+  test('explicit arch rides along with os on the socket', () async {
+    await serveLatest(
+      fileName: 'polify-1.0.0-arm64-v8a.apk',
+      architecture: 'arm64-v8a',
+    );
+    final service = BuildHutUpdateService(
+      appId: appId,
+      currentVersion: '0.9.0',
+      baseUrl: baseUrl,
+      os: 'android',
+      arch: 'arm64-v8a',
+    );
+
+    final update = await service.checkForUpdates();
+
+    expect(update, isNotNull);
+    expect(update!.architecture, 'arm64-v8a');
+    expect(requests.single, '/api/app/$appId?os=android&arch=arm64-v8a');
+  });
+
+  test('arch-404 falls back to os-only instead of reporting no update',
+      () async {
+    await startServer((req) async {
+      if (req.uri.queryParameters.containsKey('arch')) {
+        // Server has no split for this ABI (yet).
+        req.response.statusCode = 404;
+        req.response.write(
+          'No builds found for app "polify" matching os=android arch=arm64-v8a',
+        );
+        await req.response.close();
+        return;
+      }
+      req.response.statusCode = 200;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({
+        'app': 'polify',
+        'version': '1.0.0',
+        'tag': '1.0.0',
+        'description': 'latest',
+        'tags': <String>[],
+        'architecture': 'armeabi-v7a',
+        'fileName': 'polify-1.0.0-armeabi-v7a.apk',
+        'downloadUrl': 'https://s3.example.com/polify-1.0.0-armeabi-v7a.apk',
+        'uploadedAt': '2026-11-10T00:00:00.000Z',
+      }));
+      await req.response.close();
+    });
+    final service = BuildHutUpdateService(
+      appId: appId,
+      currentVersion: '0.9.0',
+      baseUrl: baseUrl,
+      os: 'android',
+      arch: 'arm64-v8a',
+    );
+
+    final update = await service.checkForUpdates();
+
+    // Two requests: arch-filtered first, then the os-only fallback.
+    expect(requests, [
+      '/api/app/$appId?os=android&arch=arm64-v8a',
+      '/api/app/$appId?os=android',
+    ]);
+    expect(update, isNotNull);
+    expect(update!.architecture, 'armeabi-v7a');
+  });
 }
